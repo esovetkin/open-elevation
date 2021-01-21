@@ -21,7 +21,7 @@ import open_elevation.celery_status as celery_status
 
 
 interface = gdal.GDALTileInterface\
-    ('data/current','data/index.json',1)
+    ('data/current','data/_polygon_index',1)
 logging.info("Amount of RESULTS_CACHE: %.2f" \
              % (app.RESULTS_CACHE.size()/(1024**3),))
 

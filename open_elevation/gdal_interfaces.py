@@ -18,7 +18,7 @@ from tqdm import tqdm
 import open_elevation.utils as utils
 import open_elevation.nrw_las as nrw_las
 import open_elevation.celery_tasks.app as app
-import open_elevation.polygon_index as polygon_index
+import open_elevation.polygon_index_diskcache as polygon_index
 
 from open_elevation.results_lrucache \
     import ResultFiles_LRUCache
@@ -214,21 +214,18 @@ class Interface_LRUCache(LRUCache):
 
 
 class GDALTileInterface(object):
-    def __init__(self, tiles_folder, index_file,
-                 open_interfaces_size=5,
-                 use_only_index = False):
+    def __init__(self, tiles_folder, index_path,
+                 open_interfaces_size=5):
         """The class keeps cache of the read files
 
         :open_interfaces_size: size of the LRU cache of the loaded interfaces. The interfaces are read lazily.
 
-        :use_only_index: if True, then tiles_folder are ignored
-        and files are not searched. Instead the index is loaded directly from the index_file path. The index_file is not saved
-
         """
         super(GDALTileInterface, self).__init__()
         self.path = tiles_folder
-        self._index_fn = index_file
-        self._index = polygon_index.Polygon_File_Index()
+        self._index = polygon_index\
+            .Polygon_File_Index_Diskcache(path = index_path)
+        self._index.check_cache()
         self._interfaces = Interface_LRUCache\
             (maxsize = open_interfaces_size)
         self._interfaces_lock = threading.RLock()
@@ -236,37 +233,9 @@ class GDALTileInterface(object):
         self._las_dirs = dict()
         self._all_coords = []
 
-        if use_only_index:
-            self.path = os.path.dirname(self._index_fn)
-            self._data_from_index()
-            return
-
-        self._data_from_files()
-
-
-    def _data_from_files(self):
         self._find_las_dirs(path = self.path)
         self._fill_all_coords()
-
-        if os.path.exists(self._index_fn) \
-           and self._files_timestamp() < \
-           os.stat(self._index_fn).st_mtime:
-            self._index.load(self._index_fn)
-            return
-
         self._build_index()
-        self._index.save(self._index_fn)
-
-
-    def _data_from_index(self):
-        self._index.load(self._index_fn)
-
-        path = os.path.commonprefix\
-            ([x for x in self._index.files()
-              if x is not None] + \
-             [x for x in self._index.files(what = 'las_meta')
-              if x is not None])
-        self._find_las_dirs(path)
 
 
     def _files_timestamp(self):
